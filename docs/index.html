@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Community Game — Submissions Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>Submissions Board</h1>
+        <p class="brand-sub">Community-made sci-fi game — every idea, sorted, voted on in the open.</p>
+      </div>
+    </div>
+    <p class="voting-note">Votes are silent. No one can see counts, including us, until voting closes.</p>
+  </div>
+</header>
+
+<nav class="category-nav wrap" id="category-nav" aria-label="Jump to category"></nav>
+
+<main class="wrap" id="board">
+  <p class="loading" id="loading">Pulling in submissions…</p>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>Ideas pulled from #Submissions on Discord. Order reshuffles every visit — read past the first few.</p>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
