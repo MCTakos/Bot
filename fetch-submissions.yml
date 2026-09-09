@@ -1,0 +1,41 @@
+name: Fetch Discord Submissions
+
+on:
+  schedule:
+    # every 15 minutes — adjust to taste
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r discord-bot/requirements.txt
+
+      - name: Fetch submissions
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          SUBMISSIONS_CHANNEL_ID: ${{ secrets.SUBMISSIONS_CHANNEL_ID }}
+          WORKER_SYNC_URL: ${{ secrets.WORKER_SYNC_URL }}
+          WORKER_SYNC_SECRET: ${{ secrets.WORKER_SYNC_SECRET }}
+        run: python discord-bot/fetch_submissions.py
+
+      - name: Commit updated JSON
+        run: |
+          git config user.name "submissions-bot"
+          git config user.email "submissions-bot@users.noreply.github.com"
+          git add docs/data/submissions.json
+          git diff --cached --quiet || git commit -m "Update submissions.json"
+          git push
