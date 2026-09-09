@@ -15,6 +15,10 @@ Optional:
   WORKER_SYNC_URL           - e.g. https://your-worker.workers.dev/api/sync
   WORKER_SYNC_SECRET        - shared secret, must match the Worker's
                                SYNC_SECRET binding
+  HF_API_TOKEN              - Hugging Face API token (free), enables
+                               automatic toxicity moderation of posts
+  MODERATION_THRESHOLD      - 0-1 score above which a post is held back
+                               (default 0.6)
 """
 
 import json
@@ -42,6 +46,13 @@ CATEGORY_MAP = {
 CATEGORY_PATTERN = re.compile(r"\bC:\s*([A-Za-z]+)\b", re.IGNORECASE)
 
 OUTPUT_PATH = Path(__file__).resolve().parent.parent / "docs" / "data" / "submissions.json"
+
+# Open-source toxicity classifier, served via Hugging Face's free hosted
+# Inference API — no local model download, no heavy dependencies.
+HF_MODEL = "unitary/toxic-bert"
+HF_API_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+DEFAULT_MODERATION_THRESHOLD = 0.6
+HF_MAX_RETRIES = 3
 
 
 def get_env(name: str, required: bool = True) -> str:
@@ -129,6 +140,73 @@ def to_submission(msg: dict) -> dict:
     }
 
 
+def check_moderation(text: str, hf_token: str) -> tuple[bool, dict]:
+    """
+    Returns (flagged, scores). Fails "open" — if the moderation API errors
+    out or is unreachable, the post is treated as not flagged, since a
+    moderation outage shouldn't take the whole board down. Any failure is
+    printed so it's visible in the Action's logs.
+    """
+    threshold = float(os.environ.get("MODERATION_THRESHOLD", DEFAULT_MODERATION_THRESHOLD))
+    headers = {"Authorization": f"Bearer {hf_token}"}
+
+    for attempt in range(HF_MAX_RETRIES):
+        try:
+            resp = requests.post(
+                HF_API_URL,
+                headers=headers,
+                json={"inputs": text[:2000], "parameters": {"top_k": None}},
+                timeout=30,
+            )
+        except requests.RequestException as exc:
+            print(f"Moderation request failed ({exc}), skipping check for this post")
+            return False, {}
+
+        if resp.status_code == 503:
+            # Model is cold-starting on Hugging Face's side; wait and retry.
+            wait = min(resp.json().get("estimated_time", 10), 30)
+            print(f"Moderation model loading, waiting {wait:.0f}s (attempt {attempt + 1})")
+            time.sleep(wait)
+            continue
+
+        if resp.status_code == 429:
+            print("Moderation API rate limited, waiting 5s")
+            time.sleep(5)
+            continue
+
+        if not resp.ok:
+            print(f"Moderation API returned {resp.status_code}, skipping check for this post")
+            return False, {}
+
+        result = resp.json()
+        # Expected shape: [[{"label": "toxic", "score": 0.98}, ...]]
+        scores_list = result[0] if result and isinstance(result[0], list) else result
+        scores = {item["label"]: item["score"] for item in scores_list}
+        flagged = any(score >= threshold for score in scores.values())
+        return flagged, scores
+
+    print("Moderation API did not respond after retries, skipping check for this post")
+    return False, {}
+
+
+def moderate_submissions(submissions: list[dict]) -> list[dict]:
+    hf_token = get_env("HF_API_TOKEN", required=False)
+    if not hf_token:
+        print("HF_API_TOKEN not set, skipping moderation")
+        return submissions
+
+    clean = []
+    for post in submissions:
+        is_flagged, scores = check_moderation(post["content"], hf_token)
+        if is_flagged:
+            print(f"Flagged and dropped post {post['id']} by @{post['author']}: {scores}")
+        else:
+            clean.append(post)
+        time.sleep(0.5)  # be polite to the free tier
+
+    return clean
+
+
 def sync_worker(ids: list[str]) -> None:
     url = get_env("WORKER_SYNC_URL", required=False)
     secret = get_env("WORKER_SYNC_SECRET", required=False)
@@ -156,11 +234,13 @@ def main() -> None:
         to_submission(m) for m in raw_messages if m.get("content", "").strip()
     ]
 
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_PATH.write_text(json.dumps(submissions, indent=2), encoding="utf-8")
-    print(f"Wrote {len(submissions)} submissions to {OUTPUT_PATH}")
+    clean = moderate_submissions(submissions)
 
-    sync_worker([s["id"] for s in submissions])
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_PATH.write_text(json.dumps(clean, indent=2), encoding="utf-8")
+    print(f"Wrote {len(clean)} submissions to {OUTPUT_PATH}")
+
+    sync_worker([s["id"] for s in clean])
 
 
 if __name__ == "__main__":
