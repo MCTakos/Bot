@@ -1,7 +1,7 @@
 // ---- Configuration -------------------------------------------------------
 // Fill in your deployed Worker URL after `wrangler deploy` (no trailing slash).
 const CONFIG = {
-  WORKER_URL: "https://community-game-votes.YOUR-SUBDOMAIN.workers.dev",
+  WORKER_URL: "https://community-game-votes.tako-spiel.workers.dev",
   DATA_URL: "data/submissions.json",
 };
 
