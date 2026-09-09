@@ -30,6 +30,7 @@ jobs:
           SUBMISSIONS_CHANNEL_ID: ${{ secrets.SUBMISSIONS_CHANNEL_ID }}
           WORKER_SYNC_URL: ${{ secrets.WORKER_SYNC_URL }}
           WORKER_SYNC_SECRET: ${{ secrets.WORKER_SYNC_SECRET }}
+          HF_API_TOKEN: ${{ secrets.HF_API_TOKEN }}
         run: python discord-bot/fetch_submissions.py
 
       - name: Commit updated JSON
